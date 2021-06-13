@@ -61,7 +61,6 @@ simplejson==3.17.2
 six==1.16.0
 sniffio==1.2.0
 soupsieve==2.2.1
-TA-Lib==0.4.20
 typer==0.3.2
 typing-extensions==3.10.0.0
 tzlocal==2.1
