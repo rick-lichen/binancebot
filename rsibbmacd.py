@@ -143,7 +143,7 @@ def calcMACDCross(np_closes):
     print("Last MACDCross = {}".format(last_macd))
 
 def getData():
-    global closes, TRADE_QUANTITY, in_position
+    global closes, TRADE_QUANTITY, in_position, bought_price
     #get historical klines
     klines = client.get_historical_klines(TRADE_SYMBOL.upper(), INTERVAL, "40m ago UTC")
     closing = []
@@ -154,14 +154,21 @@ def getData():
     query = collection_ref.order_by(
         u'time', direction=firestore.Query.DESCENDING).limit(1)
     docs = query.stream()
+    has_history = False
     for doc in docs:
         #if it enters here, it's not empty
+        has_history = True
         historical_trades = doc.to_dict()
         print("Historical Trades: ", historical_trades)
         if historical_trades["side"] == "BUY":
             print("Previously bought into a trade!")
             in_position = True
             TRADE_QUANTITY = float(historical_trades["quantity"]) #quantity = most recent trade to close it out
+            bought_price = float(historical_trades["price"])
+        elif historical_trades["side"] == "SELL":
+            print("Previously sold a trade. Not in position")
+    if not has_history:
+        print("No historical trades found")
     
 
 def checkStrat(current):
