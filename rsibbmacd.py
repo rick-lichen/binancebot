@@ -27,7 +27,7 @@ import websocket, talib, json, pprint, talib, numpy as np
 from binance.client import Client
 from binance.enums import *
 from datetime import datetime
-import pync
+# import pync
 import sys
 import firebase_admin
 from firebase_admin import credentials
@@ -172,8 +172,8 @@ def checkStrat(current):
             if last_macd > 0.0 or (last_rsi < RSI_OVERSOLD and float(current) < last_lower):
                 print("BUY!!")
                 #binance logic
-                pync.notify('Buy condition fulfilled')
-                print('\a', end='', flush=True) #plays sound?
+                # pync.notify('Buy condition fulfilled')
+                # print('\a', end='', flush=True) #plays sound?
                 order_succeeded = order(SIDE_BUY, TRADE_QUANTITY, str.upper(TRADE_SYMBOL))
                 if order_succeeded:
                     in_position = True
@@ -185,7 +185,7 @@ def checkStrat(current):
             if float(current) <= float(bought_price)*(1-STOP_LOSS):
                 print("STOP LOSS!!")
                 #binance logic
-                pync.notify('Stop loss condition fulfilled')
+                # pync.notify('Stop loss condition fulfilled')
                 order_succeeded = order(SIDE_SELL, TRADE_QUANTITY, str.upper(TRADE_SYMBOL))
                 if order_succeeded:
                     in_position = False
@@ -194,8 +194,8 @@ def checkStrat(current):
             elif last_macd < 0.0:
                 print("SELL!!")
                 #binance logic
-                pync.notify('Sell condition fulfilled')
-                print('\a', end='', flush=True) #plays sound?
+                # pync.notify('Sell condition fulfilled')
+                # print('\a', end='', flush=True) #plays sound?
                 order_succeeded = order(SIDE_SELL, TRADE_QUANTITY, str.upper(TRADE_SYMBOL))
                 if order_succeeded:
                     in_position = False
