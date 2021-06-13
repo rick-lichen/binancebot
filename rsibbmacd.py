@@ -33,13 +33,10 @@ import firebase_admin
 from firebase_admin import credentials
 from firebase_admin import firestore
 
-
+#database
 cred = credentials.Certificate("binance-7548e-firebase-adminsdk-cyqoy-1705d26e47.json")
 firebase_admin.initialize_app(cred)
-
-
 db = firestore.client()
-
 collection_ref = db.collection(u'trades')
 
 
@@ -58,12 +55,17 @@ BB_STD = 2
 STOP_LOSS = 0.1
 bought_price = None
 sold_price = None
-TRADE_QUANTITY = 9
+TRADE_QUANTITY = None
 # test_order = False
 
 
 API_KEY = "ARs15CFBgEaUaHYCbtlkHooZ7zDAR7uCatdznUmvlfp0LADVPa0tjXVoVDol6MIg"
 API_SECRET = "K9yioiGEimDd36RMQn4Qizt3OzDuzMOAkQhXKF38mX46wP63YAYghsufa3X8zodV"
+
+#HOW MUCH MONEY I'M GONNA BE SPENDING EACH TRADE. IMPORTANT!!!
+ACCOUNT_BALANCE = 0
+BUY_PERCENTAGE = 0.02
+PORTFOLIO_FRAC = 0.98
 
 closes = []
 in_position = False
@@ -77,7 +79,7 @@ last_rsi = 0
 last_macd = 0
 
 def order(side, quantity, symbol, order_type = ORDER_TYPE_MARKET):
-    global bought_price
+    global bought_price, TRADE_QUANTITY
     try: 
         print("sending order for ", symbol)
         response = client.create_order(symbol= symbol, side= side, type = order_type, quantity = quantity)
@@ -92,6 +94,8 @@ def order(side, quantity, symbol, order_type = ORDER_TYPE_MARKET):
                     u'order_id': response["orderId"],
                     u'type': response["type"],
                     u'side': response["side"],
+                    u'total_order_quantity': response["executedQty"],
+                    u'cummulativeQuoteQty': response["cummulativeQuoteQty"],
                     u'price': fills_list["price"],
                     u'quantity': fills_list["qty"],
                     u'commission': fills_list["commission"],
@@ -100,6 +104,8 @@ def order(side, quantity, symbol, order_type = ORDER_TYPE_MARKET):
                 if response["side"] == "BUY":
                     print("Buy Filled")
                     bought_price = fills_list["price"]
+                    #update trade_quantity just in case it's different than what we ordered for
+                    TRADE_QUANTITY = float(round(float(response["executedQty"]),1))
                     print("bought_price = {}".format(bought_price))
                 elif response["side"] == "SELL":
                     print("Sell Filled")
@@ -163,19 +169,29 @@ def getData():
         if historical_trades["side"] == "BUY":
             print("Previously bought into a trade!")
             in_position = True
-            TRADE_QUANTITY = float(historical_trades["quantity"]) #quantity = most recent trade to close it out
+            TRADE_QUANTITY = float(round(float(historical_trades["total_order_quantity"]),1)) #quantity = most recent trade to close it out
             bought_price = float(historical_trades["price"])
+            print("Trade quantity = ", TRADE_QUANTITY)
         elif historical_trades["side"] == "SELL":
             print("Previously sold a trade. Not in position")
     if not has_history:
         print("No historical trades found")
+
     
 
 def checkStrat(current):
-    global in_position, bought_price, STOP_LOSS
+    global in_position, bought_price, STOP_LOSS, ACCOUNT_BALANCE, PORTFOLIO_FRAC, BUY_PERCENTAGE, TRADE_QUANTITY
     if len(closes) >= 40:    # if have enough historical data needed for MACD
+        #check and update account balance (USDT)
+            #get wallet balance
+        response = client.get_asset_balance(asset="USDT")
+        ACCOUNT_BALANCE = response["free"]
+        print("account balance = ", ACCOUNT_BALANCE)
+
         if not in_position:
             print("checking for buy condition")
+            TRADE_QUANTITY = float(round((float(ACCOUNT_BALANCE)/float(current)) * PORTFOLIO_FRAC * BUY_PERCENTAGE,1))
+            print("trade quantity = ", TRADE_QUANTITY)
             if last_macd > 0.0 or (last_rsi < RSI_OVERSOLD and float(current) < last_lower):
                 print("BUY!!")
                 #binance logic
@@ -189,6 +205,7 @@ def checkStrat(current):
         else:
             #Check stop loss
             print("checking for sell condition")
+            print("trade quantity = ", TRADE_QUANTITY)
             if float(current) <= float(bought_price)*(1-STOP_LOSS):
                 print("STOP LOSS!!")
                 #binance logic
