@@ -23,7 +23,7 @@ Original file is located at
 # numpy
 # websocket_client
 
-import websocket, talib, json, pprint, talib, numpy as np
+import websocket, talib, json, pprint, talib, math, numpy as np
 from binance.client import Client
 from binance.enums import *
 from datetime import datetime
@@ -107,6 +107,7 @@ def order(side, quantity, symbol, order_type = ORDER_TYPE_MARKET):
                     bought_price = fills_list["price"]
                     #update trade_quantity just in case it's different than what we ordered for, also account for commissions
                     actual_quantity = float(response["executedQty"])*(1.0-COMMISSION)
+                    actual_quantity = math.floor(actual_quantity*10)/10.0
                     TRADE_QUANTITY = float(round(actual_quantity,1))
                     print("bought_price = {}".format(bought_price))
                 elif response["side"] == "SELL":
@@ -172,7 +173,9 @@ def getData():
             print("Previously bought into a trade!")
             in_position = True
             actual_quantity = float(historical_trades["total_order_quantity"])*(1.0-COMMISSION)
-            TRADE_QUANTITY = float(round(actual_quantity),1) #quantity = most recent trade to close it out
+            #round down to trade_quantity
+            actual_quantity = math.floor(actual_quantity*10)/10.0
+            TRADE_QUANTITY = float(round(actual_quantity,1)) #quantity = most recent trade to close it out
             bought_price = float(historical_trades["price"])
             print("Trade quantity = ", TRADE_QUANTITY)
         elif historical_trades["side"] == "SELL":
