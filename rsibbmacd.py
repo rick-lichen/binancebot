@@ -66,6 +66,7 @@ API_SECRET = "K9yioiGEimDd36RMQn4Qizt3OzDuzMOAkQhXKF38mX46wP63YAYghsufa3X8zodV"
 ACCOUNT_BALANCE = 0
 BUY_PERCENTAGE = 0.02
 PORTFOLIO_FRAC = 0.98
+COMMISSION = 0.001
 
 closes = []
 in_position = False
@@ -79,7 +80,7 @@ last_rsi = 0
 last_macd = 0
 
 def order(side, quantity, symbol, order_type = ORDER_TYPE_MARKET):
-    global bought_price, TRADE_QUANTITY
+    global bought_price, TRADE_QUANTITY, COMMISSION
     try: 
         print("sending order for ", symbol)
         response = client.create_order(symbol= symbol, side= side, type = order_type, quantity = quantity)
@@ -104,8 +105,9 @@ def order(side, quantity, symbol, order_type = ORDER_TYPE_MARKET):
                 if response["side"] == "BUY":
                     print("Buy Filled")
                     bought_price = fills_list["price"]
-                    #update trade_quantity just in case it's different than what we ordered for
-                    TRADE_QUANTITY = float(round(float(response["executedQty"]),1))
+                    #update trade_quantity just in case it's different than what we ordered for, also account for commissions
+                    actual_quantity = float(response["executedQty"])*(1.0-COMMISSION)
+                    TRADE_QUANTITY = float(round(actual_quantity,1))
                     print("bought_price = {}".format(bought_price))
                 elif response["side"] == "SELL":
                     print("Sell Filled")
@@ -256,3 +258,4 @@ def on_message(ws, message):
 #websocket.enableTrace(True)
 ws = websocket.WebSocketApp(SOCKET, on_open=on_open, on_close=on_close, on_message=on_message)
 ws.run_forever()
+
