@@ -171,7 +171,8 @@ def getData():
         if historical_trades["side"] == "BUY":
             print("Previously bought into a trade!")
             in_position = True
-            TRADE_QUANTITY = float(round(float(historical_trades["total_order_quantity"]),1)) #quantity = most recent trade to close it out
+            actual_quantity = float(historical_trades["total_order_quantity"])*(1.0-COMMISSION)
+            TRADE_QUANTITY = float(round(actual_quantity),1) #quantity = most recent trade to close it out
             bought_price = float(historical_trades["price"])
             print("Trade quantity = ", TRADE_QUANTITY)
         elif historical_trades["side"] == "SELL":
