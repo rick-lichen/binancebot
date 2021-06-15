@@ -42,7 +42,7 @@ collection_ref = db.collection(u'trades')
 
 
 INTERVAL = "1m"
-TRADE_SYMBOL = "maticusdt"
+TRADE_SYMBOL = "enjusdt"
 
 SOCKET = "wss://stream.binance.com:9443/ws/"+TRADE_SYMBOL+"@kline_"+INTERVAL
 #strategy config
@@ -52,11 +52,12 @@ RSI_OVERSOLD = 30
 BB_PERIOD = 20
 BB_STD = 2
 
-STOP_LOSS = 0.1
+STOP_LOSS = 0.15
 STOP_LOSS_PRICE = None
 bought_price = None
 sold_price = None
 TRADE_QUANTITY = None
+prev_trade_id = None
 # test_order = False
 
 
@@ -82,7 +83,7 @@ last_rsi = 0
 last_macd = 0
 
 def order(side, quantity, symbol, order_type = ORDER_TYPE_MARKET):
-    global bought_price, TRADE_QUANTITY, COMMISSION, STOP_LOSS_PRICE
+    global bought_price, TRADE_QUANTITY, COMMISSION, STOP_LOSS_PRICE, prev_trade_id
     try: 
         print("sending order for ", symbol)
         response = client.create_order(symbol= symbol, side= side, type = order_type, quantity = quantity)
@@ -91,19 +92,6 @@ def order(side, quantity, symbol, order_type = ORDER_TYPE_MARKET):
             #record trade in firestore database
             for fills_list in response["fills"]:
                 #order successful
-                collection_ref.add({
-                    u'time': response["transactTime"], 
-                    u'symbol': response["symbol"],
-                    u'order_id': response["orderId"],
-                    u'type': response["type"],
-                    u'side': response["side"],
-                    u'total_order_quantity': response["executedQty"],
-                    u'cummulativeQuoteQty': response["cummulativeQuoteQty"],
-                    u'price': fills_list["price"],
-                    u'quantity': fills_list["qty"],
-                    u'commission': fills_list["commission"],
-                    u'commission_asset': fills_list["commissionAsset"],
-                    u'trade_id': fills_list["tradeId"]})
                 if response["side"] == "BUY":
                     print("Buy Filled")
                     bought_price = float(fills_list["price"])
@@ -118,6 +106,22 @@ def order(side, quantity, symbol, order_type = ORDER_TYPE_MARKET):
                     print("Sell Filled")
                     sold_price = fills_list["price"]
                     print("sold_price= {}".format(sold_price))
+                prev_trade_id = fills_list["tradeId"]
+                collection_ref.document(str(fills_list["tradeId"])).set({
+                    u'time': response["transactTime"], 
+                    u'symbol': response["symbol"],
+                    u'order_id': response["orderId"],
+                    u'type': response["type"],
+                    u'side': response["side"],
+                    u'total_order_quantity': response["executedQty"],
+                    u'cummulativeQuoteQty': response["cummulativeQuoteQty"],
+                    u'price': fills_list["price"],
+                    u'quantity': fills_list["qty"],
+                    u'commission': fills_list["commission"],
+                    u'commission_asset': fills_list["commissionAsset"],
+                    u'trade_id': fills_list["tradeId"],
+                    u'stop_loss': STOP_LOSS_PRICE })
+
     except Exception as e:
         print(e)
         sys.exit() #terminate program
@@ -157,7 +161,7 @@ def calcMACDCross(np_closes):
     print("Last MACDCross = {}".format(last_macd))
 
 def getData():
-    global closes, TRADE_QUANTITY, in_position, bought_price, STOP_LOSS_PRICE
+    global closes, TRADE_QUANTITY, in_position, bought_price, STOP_LOSS_PRICE, prev_trade_id
     #get historical klines
     klines = client.get_historical_klines(TRADE_SYMBOL.upper(), INTERVAL, "40m ago UTC")
     closing = []
@@ -181,10 +185,12 @@ def getData():
             #round down to trade_quantity
             actual_quantity = math.floor(actual_quantity*10)/10.0
             TRADE_QUANTITY = float(round(actual_quantity,1)) #quantity = most recent trade to close it out
-            bought_price = float(historical_trades["price"])
             print("Trade quantity = ", TRADE_QUANTITY)
-            #update stop loss
-            STOP_LOSS_PRICE = bought_price * (1.0-STOP_LOSS)
+            #update other variables
+            bought_price = float(historical_trades["price"])
+            STOP_LOSS_PRICE = float(historical_trades["stop_loss"])
+            prev_trade_id = float(historical_trades["trade_id"])
+
 
         elif historical_trades["side"] == "SELL":
             print("Previously sold a trade. Not in position")
@@ -194,7 +200,7 @@ def getData():
     
 
 def checkStrat(current):
-    global in_position, bought_price, STOP_LOSS, ACCOUNT_BALANCE, PORTFOLIO_FRAC, BUY_PERCENTAGE, TRADE_QUANTITY
+    global in_position, bought_price, STOP_LOSS, ACCOUNT_BALANCE, PORTFOLIO_FRAC, BUY_PERCENTAGE, TRADE_QUANTITY, STOP_LOSS_PRICE
     if len(closes) >= 40:    # if have enough historical data needed for MACD
         #check and update account balance (USDT)
             #get wallet balance
@@ -218,12 +224,15 @@ def checkStrat(current):
                     sys.exit() #terminate program
         else:
             print("checking for sell condition")
-            print("trade quantity = ", TRADE_QUANTITY)
             #updating trailing stop loss
             if float(current) > last_upper and float(current) > bought_price:
                 #if current price is higher than the upper BB and if it's higher than purchased price
                 STOP_LOSS_PRICE = float(last_mid)
+                #update stop_loss_price in database for latest trade
+                trade_ref = collection_ref.document(str(prev_trade_id))
+                trade_ref.update({u'stop_loss': STOP_LOSS_PRICE})
             #Check stop loss
+            print("stop loss price = ", STOP_LOSS_PRICE)
             if float(current) <= STOP_LOSS_PRICE:
                 print("STOP LOSS!!")
                 #binance logic
