@@ -53,6 +53,7 @@ BB_PERIOD = 20
 BB_STD = 2
 
 STOP_LOSS = 0.1
+STOP_LOSS_PRICE = None
 bought_price = None
 sold_price = None
 TRADE_QUANTITY = None
@@ -76,11 +77,12 @@ client = Client(API_KEY, API_SECRET, tld="com")
 #strategy metrics 
 last_upper = 0
 last_lower = 0
+last_mid = 0
 last_rsi = 0
 last_macd = 0
 
 def order(side, quantity, symbol, order_type = ORDER_TYPE_MARKET):
-    global bought_price, TRADE_QUANTITY, COMMISSION
+    global bought_price, TRADE_QUANTITY, COMMISSION, STOP_LOSS_PRICE
     try: 
         print("sending order for ", symbol)
         response = client.create_order(symbol= symbol, side= side, type = order_type, quantity = quantity)
@@ -104,12 +106,14 @@ def order(side, quantity, symbol, order_type = ORDER_TYPE_MARKET):
                     u'trade_id': fills_list["tradeId"]})
                 if response["side"] == "BUY":
                     print("Buy Filled")
-                    bought_price = fills_list["price"]
+                    bought_price = float(fills_list["price"])
                     #update trade_quantity just in case it's different than what we ordered for, also account for commissions
                     actual_quantity = float(response["executedQty"])*(1.0-COMMISSION)
                     actual_quantity = math.floor(actual_quantity*10)/10.0
                     TRADE_QUANTITY = float(round(actual_quantity,1))
                     print("bought_price = {}".format(bought_price))
+                    #update stop loss
+                    STOP_LOSS_PRICE = bought_price * (1.0-STOP_LOSS)
                 elif response["side"] == "SELL":
                     print("Sell Filled")
                     sold_price = fills_list["price"]
@@ -122,11 +126,12 @@ def order(side, quantity, symbol, order_type = ORDER_TYPE_MARKET):
 
 def calcBB(np_closes):
   #bollinger bands
-  global last_upper, last_lower
+  global last_upper, last_lower, last_mid
   upperband, middleband, lowerband = talib.BBANDS(np_closes, timeperiod=BB_PERIOD, nbdevup=BB_STD, nbdevdn=BB_STD, matype=0) #2stdev, simple moving average
   last_upper = upperband[-1]
   last_lower = lowerband[-1]
-  print("Last upperband = {}, lowerband = {}".format(last_upper, last_lower))
+  last_mid = middleband[-1]
+  print("Last upperband = {}, middleband = {}, lowerband = {}".format(last_upper, last_mid, last_lower))
 
 def calcRSI(np_closes):
   #RSI
@@ -152,7 +157,7 @@ def calcMACDCross(np_closes):
     print("Last MACDCross = {}".format(last_macd))
 
 def getData():
-    global closes, TRADE_QUANTITY, in_position, bought_price
+    global closes, TRADE_QUANTITY, in_position, bought_price, STOP_LOSS_PRICE
     #get historical klines
     klines = client.get_historical_klines(TRADE_SYMBOL.upper(), INTERVAL, "40m ago UTC")
     closing = []
@@ -178,6 +183,9 @@ def getData():
             TRADE_QUANTITY = float(round(actual_quantity,1)) #quantity = most recent trade to close it out
             bought_price = float(historical_trades["price"])
             print("Trade quantity = ", TRADE_QUANTITY)
+            #update stop loss
+            STOP_LOSS_PRICE = bought_price * (1.0-STOP_LOSS)
+
         elif historical_trades["side"] == "SELL":
             print("Previously sold a trade. Not in position")
     if not has_history:
@@ -209,10 +217,14 @@ def checkStrat(current):
                 else:
                     sys.exit() #terminate program
         else:
-            #Check stop loss
             print("checking for sell condition")
             print("trade quantity = ", TRADE_QUANTITY)
-            if float(current) <= float(bought_price)*(1-STOP_LOSS):
+            #updating trailing stop loss
+            if float(current) > last_upper and float(current) > bought_price:
+                #if current price is higher than the upper BB and if it's higher than purchased price
+                STOP_LOSS_PRICE = float(last_mid)
+            #Check stop loss
+            if float(current) <= STOP_LOSS_PRICE:
                 print("STOP LOSS!!")
                 #binance logic
                 # pync.notify('Stop loss condition fulfilled')
