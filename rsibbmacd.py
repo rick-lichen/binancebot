@@ -42,7 +42,7 @@ collection_ref = db.collection(u'trades')
 
 
 INTERVAL = "1m"
-TRADE_SYMBOL = "enjusdt"
+TRADE_SYMBOL = "maticusdt"
 
 SOCKET = "wss://stream.binance.com:9443/ws/"+TRADE_SYMBOL+"@kline_"+INTERVAL
 #strategy config
