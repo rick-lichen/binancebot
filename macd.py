@@ -42,8 +42,8 @@ TRADE_QUANTITY = 9
 # test_order = False
 
 
-API_KEY = "ARs15CFBgEaUaHYCbtlkHooZ7zDAR7uCatdznUmvlfp0LADVPa0tjXVoVDol6MIg"
-API_SECRET = "K9yioiGEimDd36RMQn4Qizt3OzDuzMOAkQhXKF38mX46wP63YAYghsufa3X8zodV"
+API_KEY = "EXPIRED"
+API_SECRET = "EXPIRED"
 
 closes = []
 in_position = False
